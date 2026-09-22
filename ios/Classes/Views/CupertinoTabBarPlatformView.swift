@@ -11,6 +11,7 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
   private var rightCountVal: Int = 1
   private var currentLabels: [String] = []
   private var currentSymbols: [String] = []
+  private var currentInactiveSymbols: [String] = []
   private var leftInsetVal: CGFloat = 0
   private var rightInsetVal: CGFloat = 0
   private var splitSpacingVal: CGFloat = 8
@@ -21,6 +22,7 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
 
     var labels: [String] = []
     var symbols: [String] = []
+    var inactiveSymbols: [String] = []
     var sizes: [NSNumber] = [] // ignored; use system metrics
     var colors: [NSNumber] = [] // ignored; use tintColor
     var selectedIndex: Int = 0
@@ -35,6 +37,7 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
     if let dict = args as? [String: Any] {
       labels = (dict["labels"] as? [String]) ?? []
       symbols = (dict["sfSymbols"] as? [String]) ?? []
+      inactiveSymbols = (dict["sfSymbolsInactive"] as? [String]) ?? []
       sizes = (dict["sfSymbolSizes"] as? [NSNumber]) ?? []
       colors = (dict["sfSymbolColors"] as? [NSNumber]) ?? []
       if let v = dict["selectedIndex"] as? NSNumber { selectedIndex = v.intValue }
@@ -61,10 +64,10 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
     func buildItems(_ range: Range<Int>) -> [UITabBarItem] {
       var items: [UITabBarItem] = []
       for i in range {
-        var image: UIImage? = nil
-        if i < symbols.count { image = UIImage(systemName: symbols[i]) ?? UIImage(named: symbols[i]) }
+        let selected = (i < symbols.count) ? Self.image(named: symbols[i]) : nil
+        let unselected = (i < inactiveSymbols.count) ? Self.image(named: inactiveSymbols[i]) : nil
         let title = (i < labels.count) ? labels[i] : nil
-        items.append(UITabBarItem(title: title, image: image, selectedImage: image))
+        items.append(UITabBarItem(title: title, image: unselected ?? selected, selectedImage: selected))
       }
       return items
     }
@@ -148,6 +151,7 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
     self.rightCountVal = rightCount
     self.currentLabels = labels
     self.currentSymbols = symbols
+    self.currentInactiveSymbols = inactiveSymbols
     self.leftInsetVal = leftInset
     self.rightInsetVal = rightInset
 channel.setMethodCallHandler { [weak self] call, result in
@@ -164,16 +168,18 @@ channel.setMethodCallHandler { [weak self] call, result in
         if let args = call.arguments as? [String: Any] {
           let labels = (args["labels"] as? [String]) ?? []
           let symbols = (args["sfSymbols"] as? [String]) ?? []
+          let inactiveSymbols = (args["sfSymbolsInactive"] as? [String]) ?? []
           let selectedIndex = (args["selectedIndex"] as? NSNumber)?.intValue ?? 0
           self.currentLabels = labels
           self.currentSymbols = symbols
+          self.currentInactiveSymbols = inactiveSymbols
           func buildItems(_ range: Range<Int>) -> [UITabBarItem] {
             var items: [UITabBarItem] = []
             for i in range {
-              var image: UIImage? = nil
-              if i < symbols.count { image = UIImage(systemName: symbols[i]) ?? UIImage(named: symbols[i]) }
+              let selected = (i < symbols.count) ? Self.image(named: symbols[i]) : nil
+              let unselected = (i < inactiveSymbols.count) ? Self.image(named: inactiveSymbols[i]) : nil
               let title = (i < labels.count) ? labels[i] : nil
-              items.append(UITabBarItem(title: title, image: image, selectedImage: image))
+              items.append(UITabBarItem(title: title, image: unselected ?? selected, selectedImage: selected))
             }
             return items
           }
@@ -211,6 +217,7 @@ channel.setMethodCallHandler { [weak self] call, result in
           self.tabBarRight?.removeFromSuperview(); self.tabBarRight = nil
           let labels = self.currentLabels
           let symbols = self.currentSymbols
+          let inactiveSymbols = self.currentInactiveSymbols
           let appearance: UITabBarAppearance? = {
             if #available(iOS 13.0, *) { let ap = UITabBarAppearance(); ap.configureWithDefaultBackground(); return ap }
             return nil
@@ -218,10 +225,10 @@ channel.setMethodCallHandler { [weak self] call, result in
           func buildItems(_ range: Range<Int>) -> [UITabBarItem] {
             var items: [UITabBarItem] = []
             for i in range {
-              var image: UIImage? = nil
-              if i < symbols.count { image = UIImage(systemName: symbols[i]) ?? UIImage(named: symbols[i]) }
+              let selected = (i < symbols.count) ? Self.image(named: symbols[i]) : nil
+              let unselected = (i < inactiveSymbols.count) ? Self.image(named: inactiveSymbols[i]) : nil
               let title = (i < labels.count) ? labels[i] : nil
-              items.append(UITabBarItem(title: title, image: image, selectedImage: image))
+              items.append(UITabBarItem(title: title, image: unselected ?? selected, selectedImage: selected))
             }
             return items
           }
@@ -361,6 +368,12 @@ channel.setMethodCallHandler { [weak self] call, result in
       channel.invokeMethod("valueChanged", arguments: ["index": leftItems.count + idx])
       return
     }
+  }
+
+  /// Resolves a name to an SF Symbol, falling back to an asset catalog image.
+  private static func image(named name: String) -> UIImage? {
+    guard !name.isEmpty else { return nil }
+    return UIImage(systemName: name) ?? UIImage(named: name)
   }
 
   private static func colorFromARGB(_ argb: Int) -> UIColor {

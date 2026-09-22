@@ -8,13 +8,23 @@ import '../style/sf_symbol.dart';
 /// Immutable data describing a single tab bar item.
 class CNTabBarItem {
   /// Creates a tab bar item description.
-  const CNTabBarItem({this.label, this.icon});
+  const CNTabBarItem({this.label, this.icon, this.inactiveIcon});
 
   /// Optional tab item label.
   final String? label;
 
   /// Optional SF Symbol for the item.
+  ///
+  /// Shown while the item is selected. When [inactiveIcon] is null it is shown
+  /// in both states.
   final CNSymbol? icon;
+
+  /// Optional SF Symbol shown while the item is not selected.
+  ///
+  /// UIKit swaps between this and [icon] itself, so selection stays a native
+  /// transition rather than a rebuild of the bar. Ignored on macOS, where
+  /// `NSSegmentedControl` holds one image per segment.
+  final CNSymbol? inactiveIcon;
 }
 
 /// A Cupertino-native tab bar. Uses native UITabBar/NSTabView style visuals.
@@ -81,6 +91,7 @@ class _CNTabBarState extends State<CNTabBar> {
   double? _intrinsicWidth;
   List<String>? _lastLabels;
   List<String>? _lastSymbols;
+  List<String>? _lastInactiveSymbols;
   bool? _lastSplit;
   int? _lastRightCount;
   double? _lastSplitSpacing;
@@ -127,6 +138,9 @@ class _CNTabBarState extends State<CNTabBar> {
 
     final labels = widget.items.map((e) => e.label ?? '').toList();
     final symbols = widget.items.map((e) => e.icon?.name ?? '').toList();
+    final inactiveSymbols = widget.items
+        .map((e) => e.inactiveIcon?.name ?? '')
+        .toList();
     final sizes = widget.items
         .map((e) => (widget.iconSize ?? e.icon?.size))
         .toList();
@@ -137,6 +151,7 @@ class _CNTabBarState extends State<CNTabBar> {
     final creationParams = <String, dynamic>{
       'labels': labels,
       'sfSymbols': symbols,
+      'sfSymbolsInactive': inactiveSymbols,
       'sfSymbolSizes': sizes,
       'sfSymbolColors': colors,
       'selectedIndex': widget.currentIndex,
@@ -232,15 +247,21 @@ class _CNTabBarState extends State<CNTabBar> {
     // Items update (for hot reload or dynamic changes)
     final labels = widget.items.map((e) => e.label ?? '').toList();
     final symbols = widget.items.map((e) => e.icon?.name ?? '').toList();
+    final inactiveSymbols = widget.items
+        .map((e) => e.inactiveIcon?.name ?? '')
+        .toList();
     if (_lastLabels?.join('|') != labels.join('|') ||
-        _lastSymbols?.join('|') != symbols.join('|')) {
+        _lastSymbols?.join('|') != symbols.join('|') ||
+        _lastInactiveSymbols?.join('|') != inactiveSymbols.join('|')) {
       await ch.invokeMethod('setItems', {
         'labels': labels,
         'sfSymbols': symbols,
+        'sfSymbolsInactive': inactiveSymbols,
         'selectedIndex': widget.currentIndex,
       });
       _lastLabels = labels;
       _lastSymbols = symbols;
+      _lastInactiveSymbols = inactiveSymbols;
       // Re-measure width in case content changed
       _requestIntrinsicSize();
     }
