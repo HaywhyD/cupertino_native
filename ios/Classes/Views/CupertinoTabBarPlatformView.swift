@@ -12,6 +12,9 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
   private var currentLabels: [String] = []
   private var currentSymbols: [String] = []
   private var currentInactiveSymbols: [String] = []
+  private var itemStyle: [String: Any]? = nil
+  private var selectedItemStyle: [String: Any]? = nil
+  private var selectionIndicatorColor: UIColor? = nil
   private var leftInsetVal: CGFloat = 0
   private var rightInsetVal: CGFloat = 0
   private var splitSpacingVal: CGFloat = 8
@@ -38,6 +41,9 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
       labels = (dict["labels"] as? [String]) ?? []
       symbols = (dict["sfSymbols"] as? [String]) ?? []
       inactiveSymbols = (dict["sfSymbolsInactive"] as? [String]) ?? []
+      itemStyle = dict["itemStyle"] as? [String: Any]
+      selectedItemStyle = dict["selectedItemStyle"] as? [String: Any]
+      if let n = dict["selectionIndicatorColor"] as? NSNumber { selectionIndicatorColor = Self.colorFromARGB(n.intValue) }
       sizes = (dict["sfSymbolSizes"] as? [NSNumber]) ?? []
       colors = (dict["sfSymbolColors"] as? [NSNumber]) ?? []
       if let v = dict["selectedIndex"] as? NSNumber { selectedIndex = v.intValue }
@@ -61,6 +67,7 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
     if #available(iOS 13.0, *) { let ap = UITabBarAppearance(); ap.configureWithDefaultBackground(); return ap }
     return nil
   }()
+    if #available(iOS 13.0, *), let ap = appearance { self.applyItemStyling(to: ap) }
     func buildItems(_ range: Range<Int>) -> [UITabBarItem] {
       var items: [UITabBarItem] = []
       for i in range {
@@ -222,6 +229,7 @@ channel.setMethodCallHandler { [weak self] call, result in
             if #available(iOS 13.0, *) { let ap = UITabBarAppearance(); ap.configureWithDefaultBackground(); return ap }
             return nil
           }()
+          if #available(iOS 13.0, *), let ap = appearance { self.applyItemStyling(to: ap) }
           func buildItems(_ range: Range<Int>) -> [UITabBarItem] {
             var items: [UITabBarItem] = []
             for i in range {
@@ -367,6 +375,51 @@ channel.setMethodCallHandler { [weak self] call, result in
       tabBarLeft?.selectedItem = nil
       channel.invokeMethod("valueChanged", arguments: ["index": leftItems.count + idx])
       return
+    }
+  }
+
+  /// Paints the label and template icon of each selection state, and the
+  /// indicator behind the selected one.
+  @available(iOS 13.0, *)
+  private func applyItemStyling(to appearance: UITabBarAppearance) {
+    let item = UITabBarItemAppearance()
+    Self.style(item.normal, from: itemStyle)
+    Self.style(item.selected, from: selectedItemStyle)
+    appearance.stackedLayoutAppearance = item
+    appearance.inlineLayoutAppearance = item
+    appearance.compactInlineLayoutAppearance = item
+    if let indicator = selectionIndicatorColor { appearance.selectionIndicatorTintColor = indicator }
+  }
+
+  @available(iOS 13.0, *)
+  private static func style(_ state: UITabBarItemStateAppearance, from spec: [String: Any]?) {
+    guard let spec = spec else { return }
+    var attributes = state.titleTextAttributes
+    if let n = spec["color"] as? NSNumber {
+      let color = colorFromARGB(n.intValue)
+      attributes[.foregroundColor] = color
+      state.iconColor = color
+    }
+    let size = (spec["fontSize"] as? NSNumber).map { CGFloat(truncating: $0) } ?? UIFont.smallSystemFontSize
+    if let w = spec["fontWeight"] as? NSNumber {
+      attributes[.font] = UIFont.systemFont(ofSize: size, weight: fontWeight(w.intValue))
+    } else if spec["fontSize"] != nil {
+      attributes[.font] = UIFont.systemFont(ofSize: size)
+    }
+    state.titleTextAttributes = attributes
+  }
+
+  private static func fontWeight(_ value: Int) -> UIFont.Weight {
+    switch value {
+    case ..<150: return .ultraLight
+    case ..<250: return .thin
+    case ..<350: return .light
+    case ..<450: return .regular
+    case ..<550: return .medium
+    case ..<650: return .semibold
+    case ..<750: return .bold
+    case ..<850: return .heavy
+    default: return .black
     }
   }
 
