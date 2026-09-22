@@ -8,13 +8,53 @@ import '../style/sf_symbol.dart';
 /// Immutable data describing a single tab bar item.
 class CNTabBarItem {
   /// Creates a tab bar item description.
-  const CNTabBarItem({this.label, this.icon});
+  const CNTabBarItem({this.label, this.icon, this.inactiveIcon});
 
   /// Optional tab item label.
   final String? label;
 
   /// Optional SF Symbol for the item.
+  ///
+  /// Shown while the item is selected. When [inactiveIcon] is null it is shown
+  /// in both states.
   final CNSymbol? icon;
+
+  /// Optional SF Symbol shown while the item is not selected.
+  ///
+  /// UIKit swaps between this and [icon] itself, so selection stays a native
+  /// transition rather than a rebuild of the bar. Ignored on macOS, where
+  /// `NSSegmentedControl` holds one image per segment.
+  final CNSymbol? inactiveIcon;
+}
+
+/// How a tab bar item's label and icon are drawn in one selection state.
+///
+/// Anything left null is the platform's own choice. The font is the system
+/// one: an app's own typeface is registered with Flutter, not with UIKit, so
+/// it is not reachable from a native bar unless the app also bundles it.
+class CNTabBarItemStyle {
+  /// Creates a style for one selection state.
+  const CNTabBarItemStyle({this.color, this.fontSize, this.fontWeight});
+
+  /// Colour for both the label and the template icon.
+  final Color? color;
+
+  /// Label point size.
+  final double? fontSize;
+
+  /// Label weight, mapped to the nearest `UIFont.Weight`.
+  final FontWeight? fontWeight;
+
+  /// Null when nothing is set, so the platform keeps its own styling.
+  Map<String, dynamic>? encode(BuildContext context) {
+    final weight = fontWeight;
+    if (color == null && fontSize == null && weight == null) return null;
+    return <String, dynamic>{
+      if (color != null) 'color': resolveColorToArgb(color, context),
+      if (fontSize != null) 'fontSize': fontSize,
+      if (weight != null) 'fontWeight': weight.value,
+    };
+  }
 }
 
 /// A Cupertino-native tab bar. Uses native UITabBar/NSTabView style visuals.
@@ -27,6 +67,9 @@ class CNTabBar extends StatefulWidget {
     required this.onTap,
     this.tint,
     this.backgroundColor,
+    this.itemStyle,
+    this.selectedItemStyle,
+    this.selectionIndicatorColor,
     this.iconSize,
     this.height,
     this.split = false,
@@ -49,6 +92,15 @@ class CNTabBar extends StatefulWidget {
 
   /// Background color for the bar.
   final Color? backgroundColor;
+
+  /// How an unselected item's label and icon are drawn.
+  final CNTabBarItemStyle? itemStyle;
+
+  /// How the selected item's label and icon are drawn.
+  final CNTabBarItemStyle? selectedItemStyle;
+
+  /// Colour of the indicator drawn behind the selected item.
+  final Color? selectionIndicatorColor;
 
   /// Default icon size when item icon does not specify one.
   final double? iconSize;
@@ -81,6 +133,7 @@ class _CNTabBarState extends State<CNTabBar> {
   double? _intrinsicWidth;
   List<String>? _lastLabels;
   List<String>? _lastSymbols;
+  List<String>? _lastInactiveSymbols;
   bool? _lastSplit;
   int? _lastRightCount;
   double? _lastSplitSpacing;
@@ -127,6 +180,9 @@ class _CNTabBarState extends State<CNTabBar> {
 
     final labels = widget.items.map((e) => e.label ?? '').toList();
     final symbols = widget.items.map((e) => e.icon?.name ?? '').toList();
+    final inactiveSymbols = widget.items
+        .map((e) => e.inactiveIcon?.name ?? '')
+        .toList();
     final sizes = widget.items
         .map((e) => (widget.iconSize ?? e.icon?.size))
         .toList();
@@ -137,10 +193,17 @@ class _CNTabBarState extends State<CNTabBar> {
     final creationParams = <String, dynamic>{
       'labels': labels,
       'sfSymbols': symbols,
+      'sfSymbolsInactive': inactiveSymbols,
       'sfSymbolSizes': sizes,
       'sfSymbolColors': colors,
       'selectedIndex': widget.currentIndex,
       'isDark': _isDark,
+      'itemStyle': widget.itemStyle?.encode(context),
+      'selectedItemStyle': widget.selectedItemStyle?.encode(context),
+      'selectionIndicatorColor': resolveColorToArgb(
+        widget.selectionIndicatorColor,
+        context,
+      ),
       'split': widget.split,
       'rightCount': widget.rightCount,
       'splitSpacing': widget.splitSpacing,
@@ -232,15 +295,21 @@ class _CNTabBarState extends State<CNTabBar> {
     // Items update (for hot reload or dynamic changes)
     final labels = widget.items.map((e) => e.label ?? '').toList();
     final symbols = widget.items.map((e) => e.icon?.name ?? '').toList();
+    final inactiveSymbols = widget.items
+        .map((e) => e.inactiveIcon?.name ?? '')
+        .toList();
     if (_lastLabels?.join('|') != labels.join('|') ||
-        _lastSymbols?.join('|') != symbols.join('|')) {
+        _lastSymbols?.join('|') != symbols.join('|') ||
+        _lastInactiveSymbols?.join('|') != inactiveSymbols.join('|')) {
       await ch.invokeMethod('setItems', {
         'labels': labels,
         'sfSymbols': symbols,
+        'sfSymbolsInactive': inactiveSymbols,
         'selectedIndex': widget.currentIndex,
       });
       _lastLabels = labels;
       _lastSymbols = symbols;
+      _lastInactiveSymbols = inactiveSymbols;
       // Re-measure width in case content changed
       _requestIntrinsicSize();
     }
