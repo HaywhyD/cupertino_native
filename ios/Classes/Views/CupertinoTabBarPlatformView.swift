@@ -289,6 +289,14 @@ channel.setMethodCallHandler { [weak self] call, result in
       case "setSelectedIndex":
         if let args = call.arguments as? [String: Any], let idx = (args["index"] as? NSNumber)?.intValue {
           // Single bar
+          // A negative index clears the selection, so no tab is highlighted and
+          // every tab can be tapped (UITabBar sends nothing when the tab that is
+          // already selected is tapped).
+          if let bar = self.tabBar, idx < 0 {
+            bar.selectedItem = nil
+            result(nil)
+            return
+          }
           if let bar = self.tabBar, let items = bar.items, idx >= 0, idx < items.count {
             bar.selectedItem = items[idx]
             result(nil)
